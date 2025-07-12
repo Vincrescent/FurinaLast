@@ -106,18 +106,20 @@ async def hapus(ctx):
 async def tes(ctx):
     await ctx.send(random.choice(pesan_sapa_pagi()))
 
-@bot.command()
-async def help(ctx):
-    help_text = (
-        "**📖 COMMAND FURINA**\n"
-        "`f.daftar` → Daftarkan dirimu ke turnamen.\n"
-        "`f.peserta` → Lihat daftar peserta yang sudah mendaftar.\n"
-        "`f.hapus` → Menghapus semua data peserta.\n"
-        "`f.tes` → Tes sapaan Furina.\n\n"
-        "**✨ Tanpa Prefix:**\n"
-        "Ketik saja `halo @Furina`, `peluk aku Furina`, atau `puji aku Furina`!"
+@bot.command(name="furinahelp")
+async def furinahelp(ctx):
+    embed = discord.Embed(
+        title="🎭 Daftar Perintah Furina",
+        description=(
+            "**Prefix Command**\n"
+            "`f.daftar`, `f.peserta`, `f.hapus`, `f.tes`, `f.furinahelp`\n\n"
+            "**Tanpa Prefix (mention)**\n"
+            "`halo @furina`, `hug @furina`, `puji @furina`\n\n"
+            "Gunakan dengan bijak ya~ 💙"
+        ),
+        color=discord.Color.blue()
     )
-    await ctx.send(help_text)
+    await ctx.send(embed=embed)
 
 # === Sapa Pagi & Malam ===
 def pesan_sapa_pagi():
