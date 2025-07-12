@@ -1,48 +1,66 @@
 import discord
 from discord.ext import commands, tasks
-import os
 from flask import Flask
 from threading import Thread
-from datetime import datetime, timedelta
+import os
+import random
+from datetime import datetime
+import pytz
+import re
 
-TOKEN = os.environ["DISCORD_TOKEN"]
-CHANNEL_ID = int(os.environ["CHANNEL_ID"])
+TOKEN = os.getenv("DISCORD_TOKEN")
+CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
 
 intents = discord.Intents.default()
 intents.message_content = True
 
-bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
+bot = commands.Bot(command_prefix='f.', intents=intents)
 
 FILE_PESERTA = "peserta_turnamen.txt"
 
-sapaan_harian = {
-    "Monday": "@here Selamat hari Senin! Awali minggu ini dengan semangat penuh energi 💪🔥",
-    "Tuesday": "@here Selamat hari Selasa! Tetap fokus dan semangat dalam semua aktivitasmu hari ini 💯🚀",
-    "Wednesday": "@here Selamat hari Rabu! Jangan menyerah di tengah minggu, kamu luar biasa! 🌟✨",
-    "Thursday": "@here Selamat hari Kamis! Langkahkan kaki dengan optimis, sukses menanti di depan 🏃‍♂️💼",
-    "Friday": "@here Selamat hari Jumat! Akhiri minggu ini dengan semangat terbaikmu! 🎉💥",
-    "Saturday": "@here Selamat hari Sabtu! Nikmati waktumu, recharge energi dan tetap produktif 😎🌈",
-    "Sunday": "@here Selamat hari Minggu! Waktunya istirahat sejenak dan siapkan diri untuk minggu baru 🌿🛌",
-}
-
-
+# === Respon Interaktif Tanpa Prefix ===
 @bot.event
-async def on_ready():
-    print(f'✅ Bot aktif sebagai {bot.user}')
-    sapa_harian.start()
+async def on_message(message):
+    if message.author.bot:
+        return
 
+    content = message.content.lower()
+    mentioned = bot.user in message.mentions or "furina" in content
 
-@tasks.loop(minutes=1)
-async def sapa_harian():
-    now = datetime.utcnow() + timedelta(hours=7)
-    if now.hour == 7 and now.minute == 0:
-        channel = bot.get_channel(CHANNEL_ID)
-        if channel:
-            hari = now.strftime("%A")
-            pesan = sapaan_harian.get(hari, "@here Selamat pagi semuanya!")
-            await channel.send(pesan)
+    if mentioned:
+        if re.search(r"\bhalo\b", content):
+            responses = [
+                "🎀 Hmph, siapa yang memanggil Furina? Baiklah, halo juga~",
+                "💧 Furina menyapamu dengan gaya Fontaine yang anggun!",
+                "🎭 Halo! Panggung ini terlalu sepi tanpamu!",
+                "😤 Jangan ganggu aku... eh?! Kamu cuma mau bilang halo? Ugh... baiklah, halo!",
+            ]
+            await message.channel.send(random.choice(responses))
+            return
 
+        if re.search(r"\b(hug|peluk)\b", content):
+            responses = [
+                f"😳 E-eh?! Pelukan? B-baiklah... hanya kali ini, ya {message.author.mention}...",
+                "💙 Kau beruntung Furina sedang baik hati! Ini pelukan spesial dari Archon Hydro~",
+                "🌊 Pelukan? Jangan salah sangka! Aku hanya sedang dalam suasana hati yang baik!",
+                "🎭 Furina memelukmu seperti layaknya aktris utama memeluk penggemarnya~",
+            ]
+            await message.channel.send(random.choice(responses))
+            return
 
+        if re.search(r"\b(puji|puja)\b", content):
+            responses = [
+                "🌟 Hah! Tentu saja aku memujimu! Tapi jangan lupakan siapa yang paling bersinar di sini, yaitu aku!",
+                f"✨ {message.author.mention}, kau tampil cukup baik hari ini. Jangan mengecewakan panggung Fontaine!",
+                "🎀 Baiklah... kau layak mendapatkan pujian. Tapi itu tidak membuatmu lebih hebat dariku!",
+                "💙 Bahkan Furina pun mengakui keberanianmu. Hebat, bintang kecil!",
+            ]
+            await message.channel.send(random.choice(responses))
+            return
+
+    await bot.process_commands(message)
+
+# === Command ===
 @bot.command()
 async def daftar(ctx):
     user_id = str(ctx.author.id)
@@ -61,7 +79,6 @@ async def daftar(ctx):
             f.write(f"{username} {user_id}\n")
         await ctx.send(f"✅ {ctx.author.mention} pendaftaran *berhasil*! Semangat bertarung!")
 
-
 @bot.command()
 async def peserta(ctx):
     if not os.path.exists(FILE_PESERTA):
@@ -75,78 +92,77 @@ async def peserta(ctx):
         await ctx.send("❌ Belum ada peserta yang mendaftar.")
     else:
         daftar = [f"{i+1}. {line.split(' ')[0]}" for i, line in enumerate(lines)]
-        daftar_str = "\n".join(daftar)
-        await ctx.send(f"📋 **DAFTAR PESERTA TURNAMEN:**\n{daftar_str}")
-
+        await ctx.send(f"📋 **DAFTAR PESERTA TURNAMEN:**\n" + "\n".join(daftar))
 
 @bot.command()
 async def hapus(ctx):
-    user_id = str(ctx.author.id)
-    if not os.path.exists(FILE_PESERTA):
-        await ctx.send("❌ Tidak ada data peserta.")
-        return
-
-    with open(FILE_PESERTA, "r") as f:
-        lines = f.readlines()
-
-    with open(FILE_PESERTA, "w") as f:
-        found = False
-        for line in lines:
-            if user_id not in line:
-                f.write(line)
-            else:
-                found = True
-
-    if found:
-        await ctx.send(f"✅ {ctx.author.mention} kamu berhasil *dihapus* dari daftar.")
-    else:
-        await ctx.send(f"⚠️ {ctx.author.mention} kamu *tidak ditemukan* dalam daftar.")
-
-
-@bot.command()
-async def hapussema(ctx):
     if os.path.exists(FILE_PESERTA):
-        open(FILE_PESERTA, "w").close()
-        await ctx.send("🗑 Semua data peserta telah dihapus.")
+        os.remove(FILE_PESERTA)
+        await ctx.send("🗑️ Semua data peserta telah dihapus.")
     else:
-        await ctx.send("❌ File peserta tidak ditemukan.")
-
+        await ctx.send("📂 Tidak ada data untuk dihapus.")
 
 @bot.command()
 async def tes(ctx):
-    now = datetime.utcnow() + timedelta(hours=7)
-    hari = now.strftime("%A")
-    pesan = sapaan_harian.get(hari, "@here Selamat pagi semuanya!")
-    await ctx.send(f"(Tes) {pesan}")
+    await ctx.send(random.choice(pesan_sapa_pagi()))
 
-
-@bot.command(name="help")
-async def custom_help(ctx):
+@bot.command()
+async def help(ctx):
     help_text = (
-        "**📘 Command Furina Bot:**\n"
-        "`!daftar` – Daftar sebagai peserta turnamen.\n"
-        "`!peserta` – Lihat daftar peserta.\n"
-        "`!hapus` – Hapus dirimu dari daftar peserta.\n"
-        "`!hapussema` – Hapus semua peserta (admin only).\n"
-        "`!tes` – Tes sapaan harian sekarang.\n"
-        "`!help` – Tampilkan daftar perintah ini.\n"
+        "**📖 COMMAND FURINA**\n"
+        "`f.daftar` → Daftarkan dirimu ke turnamen.\n"
+        "`f.peserta` → Lihat daftar peserta yang sudah mendaftar.\n"
+        "`f.hapus` → Menghapus semua data peserta.\n"
+        "`f.tes` → Tes sapaan Furina.\n\n"
+        "**✨ Tanpa Prefix:**\n"
+        "Ketik saja `halo @Furina`, `peluk aku Furina`, atau `puji aku Furina`!"
     )
     await ctx.send(help_text)
 
+# === Sapa Pagi & Malam ===
+def pesan_sapa_pagi():
+    return [
+        "🎭 *Selamat pagi semuanya!* Semoga hari ini penuh kejutan indah dan energi dramatis ala Fontaine! @here",
+        "🌊 Furina datang membawa semangat! Mari kita mulai hari ini dengan aksi luar biasa! @here",
+        "✨ Wahai para bintang panggung! Hari ini adalah kesempatan untuk bersinar lagi~ @here",
+        "💙 Ayo bangkit dari tidur! Hidup ini adalah pertunjukan yang harus kau menangkan! @here"
+    ]
 
-# Webserver agar Railway tetap hidup
+def pesan_sapa_malam():
+    return [
+        "🌙 Malam telah tiba! Jangan lupa istirahat, para penonton Furina~ @here",
+        "😴 Sudah waktunya mengakhiri babak hari ini. Selamat malam! @here",
+        "🛌 Panggung boleh padam, tapi semangat tetap menyala besok pagi! @here",
+        "💤 Istirahat yang cukup, bintangku. Furina akan menunggu di hari esok~ @here"
+    ]
+
+@tasks.loop(minutes=1)
+async def sapa_harian():
+    now = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(pytz.timezone("Asia/Jakarta"))
+    channel = bot.get_channel(CHANNEL_ID)
+
+    if channel:
+        if now.hour == 7 and now.minute == 0:
+            await channel.send(random.choice(pesan_sapa_pagi()))
+        elif now.hour == 20 and now.minute == 0:
+            await channel.send(random.choice(pesan_sapa_malam()))
+
+@bot.event
+async def on_ready():
+    print(f"✅ Bot aktif sebagai {bot.user}")
+    sapa_harian.start()
+
+# === Web Server for Railway ===
 app = Flask('')
-
 
 @app.route('/')
 def home():
     return "Furina bot aktif!"
 
-
 def run():
     app.run(host='0.0.0.0', port=8080)
 
-
 Thread(target=run).start()
 
+# === Jalankan Bot ===
 bot.run(TOKEN)
