@@ -19,45 +19,41 @@ bot = commands.Bot(command_prefix='f.', intents=intents)
 FILE_PESERTA = "peserta_turnamen.txt"
 
 # === Respon Interaktif & Handler Perintah Tanpa Prefix ===
+# === GANTI FUNGSI LAMA ANDA DENGAN VERSI BARU YANG LEBIH BAIK INI ===
 @bot.event
 async def on_message(message):
     # Abaikan pesan dari bot lain, termasuk diri sendiri
     if message.author.bot:
         return
 
-    # Simpan konten asli pesan untuk pengecekan sapaan nanti
+    # Simpan konten asli pesan
     original_content = message.content
     content_lower = original_content.lower()
 
-    # Handler untuk perintah tanpa prefix, contoh: "furina voting ..."
+    # --- Handler untuk perintah tanpa prefix (Versi Perbaikan) ---
     if content_lower.startswith("furina "):
-        parts = original_content.split()
-        if len(parts) > 1:
-            command_word = parts[1].lower()
-            
-            # Daftar semua perintah yang bisa dijalankan dengan cara ini
-            prefixless_commands = [
-                "daftar", "peserta", "hapus", "tes", "furinahelp",
-                "voting", "pilih", "panggung", "inspeksi"
-            ]
-            
-            if command_word in prefixless_commands:
-                # Ganti "furina" dengan prefix "f."
-                parts[0] = "f."
-                message.content = " ".join(parts)
-                # Biarkan bot memproses pesan yang sudah dimodifikasi ini sebagai perintah
-                await bot.process_commands(message)
-                return
+        # Ambil bagian setelah "furina ", lalu tambahkan prefix "f." di depannya
+        # Contoh: "furina pilih A B" -> "f. pilih A B"
+        new_content = "f." + original_content[len("furina"):] # Potong kata "furina"
 
-    # Logika sapaan (hanya berjalan jika logika di atas tidak terpanggil)
+        # Buat salinan dari pesan asli dan ganti kontennya
+        # Ini cara yang lebih aman daripada mengubah pesan yang sedang diproses
+        new_msg = message
+        new_msg.content = new_content
+        
+        print(f"Mengubah '{original_content}' menjadi '{new_msg.content}' untuk diproses.") # Debugging
+        
+        # Suruh bot untuk memproses pesan yang sudah kita modifikasi
+        await bot.process_commands(new_msg)
+        return # Penting: Hentikan fungsi di sini agar tidak lanjut ke bawah
+
+    # --- Logika sapaan (hanya berjalan jika logika di atas tidak terpanggil) ---
     mentioned = bot.user in message.mentions or "furina" in content_lower
     if mentioned:
         if re.search(r"\bhalo\b", content_lower):
             responses = [
                 "🎀 Hmph, siapa yang memanggil Furina? Baiklah, halo juga~",
                 "💧 Furina menyapamu dengan gaya Fontaine yang anggun!",
-                "🎭 Halo! Panggung ini terlalu sepi tanpamu!",
-                "😤 Jangan ganggu aku... eh?! Kamu cuma mau bilang halo? Ugh... baiklah, halo!",
             ]
             await message.channel.send(random.choice(responses))
             return
@@ -66,8 +62,6 @@ async def on_message(message):
             responses = [
                 f"😳 E-eh?! Pelukan? B-baiklah... hanya kali ini, ya {message.author.mention}...",
                 "💙 Kau beruntung Furina sedang baik hati! Ini pelukan spesial dari Archon Hydro~",
-                "🌊 Pelukan? Jangan salah sangka! Aku hanya sedang dalam suasana hati yang baik!",
-                "🎭 Furina memelukmu seperti layaknya aktris utama memeluk penggemarnya~",
             ]
             await message.channel.send(random.choice(responses))
             return
@@ -76,8 +70,6 @@ async def on_message(message):
             responses = [
                 "🌟 Hah! Tentu saja aku memujimu! Tapi jangan lupakan siapa yang paling bersinar di sini, yaitu aku!",
                 f"✨ {message.author.mention}, kau tampil cukup baik hari ini. Jangan mengecewakan panggung Fontaine!",
-                "🎀 Baiklah... kau layak mendapatkan pujian. Tapi itu tidak membuatmu lebih hebat dariku!",
-                "💙 Bahkan Furina pun mengakui keberanianmu. Hebat, bintang kecil!",
             ]
             await message.channel.send(random.choice(responses))
             return
