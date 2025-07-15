@@ -14,9 +14,7 @@ CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
 intents = discord.Intents.default()
 intents.message_content = True
 
-# === [PERUBAHAN UTAMA] Prefix diubah menjadi "furina " ===
-# Spasi di akhir sangat penting agar bot hanya merespon "furina panggung", bukan "furinapanggung"
-bot = commands.Bot(command_prefix='furina ', intents=intents)
+bot = commands.Bot(command_prefix='furina ', intents=intents, help_command=None)
 
 FILE_PESERTA = "peserta_turnamen.txt"
 
