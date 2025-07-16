@@ -7,12 +7,13 @@ import random
 from datetime import datetime
 import pytz
 import re
-import pymongo # Menggantikan 'json'
+import pymongo
 from collections import defaultdict
+import asyncio
 
 # --- KONFIGURASI ---
 TOKEN = os.getenv("DISCORD_TOKEN")
-MONGO_URI = os.getenv("MONGO_URI") # Pastikan ini ada di file .env Anda
+MONGO_URI = os.getenv("MONGO_URI")
 CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
 FILE_PESERTA = "peserta_turnamen.txt"
 
@@ -41,19 +42,17 @@ intents.members = True
 bot = commands.Bot(command_prefix='furina ', intents=intents, help_command=None)
 cooldowns = defaultdict(int)
 
-# === Event on_message dengan Sistem Database ===
-@bot.event
-async def on_message(message):
+# === Fungsi Leveling Asynchronous (untuk Performa) ===
+async def process_leveling(message):
     global cooldowns
-    if message.author.bot or not message.guild:
-        return
-
     try:
         user_id = str(message.author.id)
-        user_data = leveling_collection.find_one({"_id": user_id})
+        
+        loop = asyncio.get_event_loop()
+        user_data = await loop.run_in_executor(None, lambda: leveling_collection.find_one({"_id": user_id}))
 
         if not user_data:
-            leveling_collection.insert_one({"_id": user_id, "apresiasi": 0, "level": 1})
+            await loop.run_in_executor(None, lambda: leveling_collection.insert_one({"_id": user_id, "apresiasi": 0, "level": 1}))
             user_data = {"apresiasi": 0, "level": 1}
 
         now = int(datetime.now().timestamp())
@@ -65,11 +64,11 @@ async def on_message(message):
             level_lama = user_data.get('level', 1)
             apresiasi_dibutuhkan = 5 * (level_lama ** 2) + 50 * level_lama + 100
             
-            leveling_collection.update_one({"_id": user_id}, {"$set": {"apresiasi": new_apresiasi}})
+            await loop.run_in_executor(None, lambda: leveling_collection.update_one({"_id": user_id}, {"$set": {"apresiasi": new_apresiasi}}))
 
             if new_apresiasi >= apresiasi_dibutuhkan:
                 level_baru = level_lama + 1
-                leveling_collection.update_one({"_id": user_id}, {"$set": {"level": level_baru}})
+                await loop.run_in_executor(None, lambda: leveling_collection.update_one({"_id": user_id}, {"$set": {"level": level_baru}}))
                 await message.channel.send(f"🎉 Selamat, {message.author.mention}! Kau telah naik ke **Level Panggung {level_baru}**!")
                 
                 if level_baru in LEVELING_ROLES:
@@ -83,9 +82,16 @@ async def on_message(message):
     except Exception as e:
         print(f"--- ERROR PADA SISTEM LEVELING (DB): {e} ---")
 
+# === Event on_message (Optimized) ===
+@bot.event
+async def on_message(message):
+    if message.author.bot or not message.guild:
+        return
+
+    asyncio.create_task(process_leveling(message))
     await bot.process_commands(message)
 
-# === Perintah Interaksi ===
+# === Perintah Interaksi (Respons Diperbanyak menjadi 7) ===
 @bot.command(name="halo")
 async def sapa_halo(ctx):
     responses = [
@@ -93,7 +99,9 @@ async def sapa_halo(ctx):
         "Furina menyapamu dengan gaya Fontaine yang anggun!",
         "Sebuah sapaan? Menarik! Halo, wahai penonton setiaku.",
         "Oh? Halo. Kuharap kau punya sesuatu yang menarik untuk ditampilkan hari ini.",
-        "Panggung terasa lebih hidup dengan kehadiranmu. Halo!"
+        "Panggung terasa lebih hidup dengan kehadiranmu. Halo!",
+        "Ada perlu apa memanggilku? Ah, hanya halo? Baiklah, halo.",
+        "Halo! Jangan berdiri di situ saja, panggung menantimu!"
     ]
     await ctx.send(random.choice(responses))
 
@@ -104,18 +112,22 @@ async def sapa_peluk(ctx):
         "Kau beruntung Furina sedang baik hati! Ini pelukan spesial dari Archon Hydro~",
         f"Sebuah pelukan hangat untuk aktor favoritku hari ini. Manfaatkan selagi bisa, {ctx.author.mention}.",
         "Hmph. Jangan salah paham. Aku tidak memelukmu. Aku hanya... memeriksa kualitas kostummu dari dekat.",
-        f"Baiklah, kemari {ctx.author.mention}. Bahkan seorang sutradara agung sepertiku butuh istirahat sejenak."
+        f"Baiklah, kemari {ctx.author.mention}. Bahkan seorang sutradara agung sepertiku butuh istirahat sejenak.",
+        f"Hanya karena kau terlihat menyedihkan, akan kuberikan satu pelukan. Cepat, sebelum aku berubah pikiran, {ctx.author.mention}.",
+        "Pelukan? Energi yang bagus! Ini akan menjadi adegan yang dramatis!"
     ]
     await ctx.send(random.choice(responses))
 
 @bot.command(name="puji", aliases=["puja"])
 async def sapa_puji(ctx):
     responses = [
-        "Hah! Tentu saja aku memujimu! Tapi jangan lupakan siapa yang paling bersinar di sini, yaitu aku!",
-        f"{ctx.author.mention}, kau tampil cukup baik hari ini. Jangan mengecewakan panggung Fontaine!",
+        "🌟 Hah! Tentu saja aku memujimu! Tapi jangan lupakan siapa yang paling bersinar di sini, yaitu aku!",
+        f"✨ {ctx.author.mention}, kau tampil cukup baik hari ini. Jangan mengecewakan panggung Fontaine!",
         f"Kerja bagus, {ctx.author.mention}! Penampilanmu layak mendapatkan tepuk tangan... dariku!",
         "Pujianmu kuakui. Kau punya mata yang bagus untuk melihat kehebatan sejati.",
-        f"Teruslah begitu, {ctx.author.mention}, dan mungkin suatu hari kau bisa menjadi sepopuler diriku. Mungkin."
+        f"Teruslah begitu, {ctx.author.mention}, dan mungkin suatu hari kau bisa menjadi sepopuler diriku. Mungkin.",
+        "Tentu saja kau memujiku, siapa lagi yang layak dipuja di sini? Pujianmu diterima.",
+        f"Kata-katamu manis sekali, {ctx.author.mention}. Kau tahu cara menyenangkan seorang Ratu."
     ]
     await ctx.send(random.choice(responses))
 
@@ -125,8 +137,7 @@ async def profil(ctx, member: discord.Member = None):
     if member is None: member = ctx.author
     user_data = leveling_collection.find_one({"_id": str(member.id)})
     if user_data:
-        level = user_data.get('level', 1)
-        apresiasi = user_data.get('apresiasi', 0)
+        level, apresiasi = user_data.get('level', 1), user_data.get('apresiasi', 0)
         dibutuhkan = 5 * (level ** 2) + 50 * level + 100
         persen = min(100, (apresiasi / dibutuhkan) * 100) if dibutuhkan > 0 else 0
         bar = '█' * int(persen / 10) + '░' * (10 - int(persen / 10))
@@ -136,8 +147,7 @@ async def profil(ctx, member: discord.Member = None):
         embed.add_field(name="Total Apresiasi", value=f"{apresiasi} poin", inline=True)
         embed.add_field(name="Progres Level", value=f"{bar} ({apresiasi}/{dibutuhkan})", inline=False)
         await ctx.send(embed=embed)
-    else:
-        await ctx.send(f"Hmm, {member.mention} sepertinya masih malu-malu.")
+    else: await ctx.send(f"Hmm, {member.mention} sepertinya masih malu-malu.")
 
 @bot.command(name="leaderboard", aliases=["panggung_utama"])
 async def leaderboard(ctx):
@@ -152,34 +162,45 @@ async def leaderboard(ctx):
         except (discord.NotFound, discord.HTTPException):
             nama = f"Aktor Misterius (ID: {user_data['_id']})"
         embed.add_field(name=f"#{i+1}: {nama}", value=f"**Level {user_data.get('level', 1)}** - {user_data.get('apresiasi', 0)} Apresiasi", inline=False)
-    if not any_user_found:
-        return await ctx.send("🎭 Panggung utama masih kosong! Belum ada aktor yang menunjukkan bakatnya.")
+    if not any_user_found: return await ctx.send("🎭 Panggung utama masih kosong!")
     await ctx.send(embed=embed)
 
 # === Perintah Turnamen (File) ===
 @bot.command()
 async def daftar(ctx):
     user_id, username = str(ctx.author.id), str(ctx.author)
-    if not os.path.exists(FILE_PESERTA): open(FILE_PESERTA, "w").close()
-    with open(FILE_PESERTA, "r") as f: daftar_id = [line.strip().split(" ")[-1] for line in f.readlines()]
-    if user_id in daftar_id: await ctx.send(f"⚠️ {ctx.author.mention} kamu *sudah terdaftar*.")
-    else:
-        with open(FILE_PESERTA, "a") as f: f.write(f"{username} {user_id}\n")
-        await ctx.send(f"✅ {ctx.author.mention} pendaftaran *berhasil*!")
+    try:
+        if not os.path.exists(FILE_PESERTA): open(FILE_PESERTA, "w").close()
+        with open(FILE_PESERTA, "r") as f: daftar_id = [line.strip().split(" ")[-1] for line in f.readlines()]
+        if user_id in daftar_id: await ctx.send(f"⚠️ {ctx.author.mention} kamu *sudah terdaftar*.")
+        else:
+            with open(FILE_PESERTA, "a") as f: f.write(f"{username} {user_id}\n")
+            await ctx.send(f"✅ {ctx.author.mention} pendaftaran *berhasil*!")
+    except Exception as e:
+        await ctx.send("Maaf, terjadi error pada sistem file. Mungkin hosting tidak mendukung penulisan file.")
+        print(f"Error pada perintah 'daftar': {e}")
 
 @bot.command()
 async def peserta(ctx):
-    if not os.path.exists(FILE_PESERTA) or os.path.getsize(FILE_PESERTA) == 0: return await ctx.send("❌ Belum ada peserta.")
-    with open(FILE_PESERTA, "r") as f: lines = f.readlines()
-    daftar = [f"{i+1}. {line.split(' ')[0]}" for i, line in enumerate(lines)]
-    await ctx.send(f"📋 **DAFTAR PESERTA:**\n" + "\n".join(daftar))
+    try:
+        if not os.path.exists(FILE_PESERTA) or os.path.getsize(FILE_PESERTA) == 0: return await ctx.send("❌ Belum ada peserta.")
+        with open(FILE_PESERTA, "r") as f: lines = f.readlines()
+        daftar = [f"{i+1}. {line.split(' ')[0]}" for i, line in enumerate(lines)]
+        await ctx.send(f"📋 **DAFTAR PESERTA:**\n" + "\n".join(daftar))
+    except Exception as e:
+        await ctx.send("Maaf, terjadi error pada sistem file.")
+        print(f"Error pada perintah 'peserta': {e}")
 
 @bot.command()
 async def hapus(ctx):
-    if os.path.exists(FILE_PESERTA):
-        os.remove(FILE_PESERTA)
-        await ctx.send("🗑️ Semua data peserta telah dihapus.")
-    else: await ctx.send("📂 Tidak ada data untuk dihapus.")
+    try:
+        if os.path.exists(FILE_PESERTA):
+            os.remove(FILE_PESERTA)
+            await ctx.send("🗑️ Semua data peserta telah dihapus.")
+        else: await ctx.send("📂 Tidak ada data untuk dihapus.")
+    except Exception as e:
+        await ctx.send("Maaf, terjadi error pada sistem file.")
+        print(f"Error pada perintah 'hapus': {e}")
 
 # === Perintah Utilitas ===
 @bot.command(name="help")
@@ -234,14 +255,16 @@ async def inspeksi(ctx, member: discord.Member = None):
     embed.set_footer(text=f"Diinspeksi oleh Furina atas permintaan {ctx.author.display_name}")
     await ctx.send(embed=embed)
 
-# === Sapa Pagi & Malam ===
+# === Sapa Pagi & Malam (Respons Diperbanyak menjadi 7) ===
 def pesan_sapa_pagi():
     return [
         "*Selamat pagi semuanya!* Semoga hari ini penuh kejutan indah dan energi dramatis ala Fontaine! @here",
         "Furina datang membawa semangat! Mari kita mulai hari ini dengan aksi luar biasa! @here",
         "Tirai telah dibuka untuk hari yang baru! Selamat pagi, para bintangku! Saatnya bersinar! @here",
         "Kopi? Teh? Tidak, yang kalian butuhkan adalah semangat dari Archon Hydro untuk memulai hari! Selamat pagi! @here",
-        "Bangunlah, para penidur! Panggung kehidupan menanti penampilan terbaikmu hari ini! @here"
+        "Bangunlah, para penidur! Panggung kehidupan menanti penampilan terbaikmu hari ini! @here",
+        "Fajar menyingsing! Sebuah babak baru telah dimulai. Berikan penampilan terbaikmu hari ini! @here",
+        "Selamat pagi, para penonton! Furina sudah siap untuk pertunjukan hari ini. Bagaimana dengan kalian? @here"
     ]
 
 def pesan_sapa_malam():
@@ -250,7 +273,9 @@ def pesan_sapa_malam():
         "Sudah waktunya mengakhiri babak hari ini. Selamat malam! @here",
         "Pertunjukan hari ini selesai. Istirahatlah yang nyenyak agar bisa tampil lebih baik besok. Selamat malam! @here",
         "Lampu panggung telah padam. Sampai jumpa di pertunjukan esok hari. Mimpi indah! @here",
-        "Bahkan bintang sehebat aku pun butuh istirahat. Selamat malam, semuanya! @here"
+        "Bahkan bintang sehebat aku pun butuh istirahat. Selamat malam, semuanya! @here",
+        "Bahkan bulan pun butuh istirahat dari sorotan. Selamat malam, sampai jumpa di babak selanjutnya. @here",
+        "Tirai malam telah turun. Simpan energimu, karena besok panggung akan lebih megah! Selamat malam! @here"
     ]
 
 @tasks.loop(minutes=1)
