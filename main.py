@@ -7,13 +7,14 @@ import random
 from datetime import datetime
 import pytz
 import re
-import json
+import pymongo # Menggantikan 'json'
 from collections import defaultdict
 
+# --- KONFIGURASI ---
 TOKEN = os.getenv("DISCORD_TOKEN")
+MONGO_URI = os.getenv("MONGO_URI") # Pastikan ini ada di file .env Anda
 CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
 FILE_PESERTA = "peserta_turnamen.txt"
-LEVELS_FILE = "levels.json"
 
 LEVELING_ROLES = {
     5: "Level 5: Aktor Pendatang Baru",
@@ -24,13 +25,23 @@ LEVELING_ROLES = {
     75: "Level 75: Tangan Kanan Sutradara"
 }
 
+# --- Inisialisasi Database & Bot ---
+try:
+    mongo_client = pymongo.MongoClient(MONGO_URI)
+    db = mongo_client.get_database("FurinaDB")
+    leveling_collection = db.get_collection("leveling")
+    print("✅ Berhasil terhubung ke Database MongoDB!")
+except pymongo.errors.ConfigurationError:
+    print("❌ Gagal terhubung ke Database. Pastikan MONGO_URI sudah benar di file .env Anda.")
+    exit()
+
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 bot = commands.Bot(command_prefix='furina ', intents=intents, help_command=None)
-
 cooldowns = defaultdict(int)
 
+# === Event on_message dengan Sistem Database ===
 @bot.event
 async def on_message(message):
     global cooldowns
@@ -38,25 +49,27 @@ async def on_message(message):
         return
 
     try:
-        try:
-            with open(LEVELS_FILE, 'r') as f: users = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError): users = {}
-
         user_id = str(message.author.id)
-        if user_id not in users:
-            users[user_id] = {'apresiasi': 0, 'level': 1}
+        user_data = leveling_collection.find_one({"_id": user_id})
+
+        if not user_data:
+            leveling_collection.insert_one({"_id": user_id, "apresiasi": 0, "level": 1})
+            user_data = {"apresiasi": 0, "level": 1}
 
         now = int(datetime.now().timestamp())
         if now - cooldowns[user_id] > 60:
-            users[user_id]['apresiasi'] += random.randint(15, 25)
+            apresiasi_didapat = random.randint(15, 25)
+            new_apresiasi = user_data.get('apresiasi', 0) + apresiasi_didapat
             cooldowns[user_id] = now
             
-            level_lama = users[user_id]['level']
+            level_lama = user_data.get('level', 1)
             apresiasi_dibutuhkan = 5 * (level_lama ** 2) + 50 * level_lama + 100
+            
+            leveling_collection.update_one({"_id": user_id}, {"$set": {"apresiasi": new_apresiasi}})
 
-            if users[user_id]['apresiasi'] >= apresiasi_dibutuhkan:
-                users[user_id]['level'] += 1
-                level_baru = users[user_id]['level']
+            if new_apresiasi >= apresiasi_dibutuhkan:
+                level_baru = level_lama + 1
+                leveling_collection.update_one({"_id": user_id}, {"$set": {"level": level_baru}})
                 await message.channel.send(f"🎉 Selamat, {message.author.mention}! Kau telah naik ke **Level Panggung {level_baru}**!")
                 
                 if level_baru in LEVELING_ROLES:
@@ -65,14 +78,14 @@ async def on_message(message):
                         await message.author.add_roles(peran_baru)
                         if level_lama in LEVELING_ROLES:
                             peran_lama = discord.utils.get(message.guild.roles, name=LEVELING_ROLES[level_lama])
-                            if peran_lama: await message.author.remove_roles(peran_lama)
-        
-        with open(LEVELS_FILE, 'w') as f: json.dump(users, f, indent=4)
+                            if peran_lama and peran_lama in message.author.roles:
+                                await message.author.remove_roles(peran_lama)
     except Exception as e:
-        print(f"--- ERROR PADA SISTEM LEVELING: {e} ---")
+        print(f"--- ERROR PADA SISTEM LEVELING (DB): {e} ---")
 
     await bot.process_commands(message)
 
+# === Perintah Interaksi ===
 @bot.command(name="halo")
 async def sapa_halo(ctx):
     responses = [
@@ -98,16 +111,54 @@ async def sapa_peluk(ctx):
 @bot.command(name="puji", aliases=["puja"])
 async def sapa_puji(ctx):
     responses = [
-        "🌟 Hah! Tentu saja aku memujimu! Tapi jangan lupakan siapa yang paling bersinar di sini, yaitu aku!",
-        f"✨ {ctx.author.mention}, kau tampil cukup baik hari ini. Jangan mengecewakan panggung Fontaine!",
+        "Hah! Tentu saja aku memujimu! Tapi jangan lupakan siapa yang paling bersinar di sini, yaitu aku!",
+        f"{ctx.author.mention}, kau tampil cukup baik hari ini. Jangan mengecewakan panggung Fontaine!",
         f"Kerja bagus, {ctx.author.mention}! Penampilanmu layak mendapatkan tepuk tangan... dariku!",
         "Pujianmu kuakui. Kau punya mata yang bagus untuk melihat kehebatan sejati.",
         f"Teruslah begitu, {ctx.author.mention}, dan mungkin suatu hari kau bisa menjadi sepopuler diriku. Mungkin."
     ]
     await ctx.send(random.choice(responses))
 
+# === Perintah Leveling (Database) ===
+@bot.command(name="profil", aliases=["profile"])
+async def profil(ctx, member: discord.Member = None):
+    if member is None: member = ctx.author
+    user_data = leveling_collection.find_one({"_id": str(member.id)})
+    if user_data:
+        level = user_data.get('level', 1)
+        apresiasi = user_data.get('apresiasi', 0)
+        dibutuhkan = 5 * (level ** 2) + 50 * level + 100
+        persen = min(100, (apresiasi / dibutuhkan) * 100) if dibutuhkan > 0 else 0
+        bar = '█' * int(persen / 10) + '░' * (10 - int(persen / 10))
+        embed = discord.Embed(title=f"🎭 Kartu Status: {member.display_name}", color=member.color)
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.add_field(name="Status Panggung", value=f"Level {level}", inline=True)
+        embed.add_field(name="Total Apresiasi", value=f"{apresiasi} poin", inline=True)
+        embed.add_field(name="Progres Level", value=f"{bar} ({apresiasi}/{dibutuhkan})", inline=False)
+        await ctx.send(embed=embed)
+    else:
+        await ctx.send(f"Hmm, {member.mention} sepertinya masih malu-malu.")
+
+@bot.command(name="leaderboard", aliases=["panggung_utama"])
+async def leaderboard(ctx):
+    sorted_users = leveling_collection.find().sort("apresiasi", -1).limit(10)
+    embed = discord.Embed(title="🏆 Panggung Utama Fontaine 🏆", description="Inilah 10 Aktor dengan Apresiasi tertinggi!", color=discord.Color.gold())
+    any_user_found = False
+    for i, user_data in enumerate(sorted_users):
+        any_user_found = True
+        try:
+            member = await ctx.guild.fetch_member(int(user_data["_id"]))
+            nama = member.display_name
+        except (discord.NotFound, discord.HTTPException):
+            nama = f"Aktor Misterius (ID: {user_data['_id']})"
+        embed.add_field(name=f"#{i+1}: {nama}", value=f"**Level {user_data.get('level', 1)}** - {user_data.get('apresiasi', 0)} Apresiasi", inline=False)
+    if not any_user_found:
+        return await ctx.send("🎭 Panggung utama masih kosong! Belum ada aktor yang menunjukkan bakatnya.")
+    await ctx.send(embed=embed)
+
+# === Perintah Turnamen (File) ===
 @bot.command()
-async def daftar(ctx): #... (kode sama)
+async def daftar(ctx):
     user_id, username = str(ctx.author.id), str(ctx.author)
     if not os.path.exists(FILE_PESERTA): open(FILE_PESERTA, "w").close()
     with open(FILE_PESERTA, "r") as f: daftar_id = [line.strip().split(" ")[-1] for line in f.readlines()]
@@ -115,7 +166,7 @@ async def daftar(ctx): #... (kode sama)
     else:
         with open(FILE_PESERTA, "a") as f: f.write(f"{username} {user_id}\n")
         await ctx.send(f"✅ {ctx.author.mention} pendaftaran *berhasil*!")
-        
+
 @bot.command()
 async def peserta(ctx):
     if not os.path.exists(FILE_PESERTA) or os.path.getsize(FILE_PESERTA) == 0: return await ctx.send("❌ Belum ada peserta.")
@@ -130,6 +181,7 @@ async def hapus(ctx):
         await ctx.send("🗑️ Semua data peserta telah dihapus.")
     else: await ctx.send("📂 Tidak ada data untuk dihapus.")
 
+# === Perintah Utilitas ===
 @bot.command(name="help")
 async def furinahelp(ctx):
     embed = discord.Embed(title="🎭 Daftar Perintah Furina", color=discord.Color.blue(), description="Panggil aku dengan `furina [nama_perintah]`.")
@@ -138,42 +190,6 @@ async def furinahelp(ctx):
     embed.add_field(name="Turnamen", value="`daftar`, `peserta`, `hapus`", inline=False)
     embed.add_field(name="Utilitas", value="`voting`, `pilih`, `panggung`, `inspeksi`", inline=False)
     embed.set_footer(text="Gunakan dengan bijak ya~ 💙")
-    await ctx.send(embed=embed)
-
-@bot.command(name="profil", aliases=["profile"])
-async def profil(ctx, member: discord.Member = None):
-    if member is None: member = ctx.author
-    try:
-        with open(LEVELS_FILE, 'r') as f: users = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError): return await ctx.send("🎭 Belum ada data pertunjukan.")
-    user_id = str(member.id)
-    if user_id in users:
-        level, apresiasi = users[user_id].get('level', 1), users[user_id].get('apresiasi', 0)
-        dibutuhkan = 5 * (level ** 2) + 50 * level + 100
-        persen = min(100, (apresiasi / dibutuhkan) * 100)
-        bar = '█' * int(persen / 10) + '░' * (10 - int(persen / 10))
-        embed = discord.Embed(title=f"🎭 Kartu Status: {member.display_name}", color=member.color)
-        embed.set_thumbnail(url=member.display_avatar.url)
-        embed.add_field(name="Status Panggung", value=f"Level {level}", inline=True)
-        embed.add_field(name="Total Apresiasi", value=f"{apresiasi} poin", inline=True)
-        embed.add_field(name="Progres Level", value=f"{bar} ({apresiasi}/{dibutuhkan})", inline=False)
-        await ctx.send(embed=embed)
-    else: await ctx.send(f"Hmm, {member.mention} sepertinya masih malu-malu.")
-
-@bot.command(name="leaderboard", aliases=["panggung_utama"])
-async def leaderboard(ctx):
-    try:
-        with open(LEVELS_FILE, 'r') as f: users = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError): return await ctx.send("🎭 Panggung utama masih kosong.")
-    sorted_users = sorted(users.items(), key=lambda item: item[1]['apresiasi'], reverse=True)
-    embed = discord.Embed(title="🏆 Panggung Utama Fontaine 🏆", description="Inilah 10 Aktor dengan Apresiasi tertinggi!", color=discord.Color.gold())
-    for i, (user_id, data) in enumerate(sorted_users[:10]):
-        try:
-            member = await ctx.guild.fetch_member(int(user_id))
-            nama = member.display_name
-        except (discord.NotFound, discord.HTTPException):
-            nama = f"Aktor Misterius (ID: {user_id})"
-        embed.add_field(name=f"#{i+1}: {nama}", value=f"**Level {data.get('level', 1)}** - {data.get('apresiasi', 0)} Apresiasi", inline=False)
     await ctx.send(embed=embed)
 
 @bot.command(name="voting")
@@ -218,7 +234,7 @@ async def inspeksi(ctx, member: discord.Member = None):
     embed.set_footer(text=f"Diinspeksi oleh Furina atas permintaan {ctx.author.display_name}")
     await ctx.send(embed=embed)
 
-# === Sapa Pagi & Malam (Respons Diperbanyak) ===
+# === Sapa Pagi & Malam ===
 def pesan_sapa_pagi():
     return [
         "*Selamat pagi semuanya!* Semoga hari ini penuh kejutan indah dan energi dramatis ala Fontaine! @here",
