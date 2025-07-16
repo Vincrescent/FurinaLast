@@ -10,6 +10,10 @@ import re
 import pymongo
 from collections import defaultdict
 import asyncio
+from dotenv import load_dotenv # <-- DITAMBAHKAN
+
+# --- [PERBAIKAN] Memuat variabel dari .env ---
+load_dotenv() # <-- DITAMBAHKAN
 
 # --- KONFIGURASI ---
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -95,8 +99,8 @@ async def on_message(message):
 @bot.command(name="halo")
 async def sapa_halo(ctx):
     responses = [
-        "Hmph, siapa yang memanggil Furina? Baiklah, halo juga~",
-        "Furina menyapamu dengan gaya Fontaine yang anggun!",
+        "🎀 Hmph, siapa yang memanggil Furina? Baiklah, halo juga~",
+        "💧 Furina menyapamu dengan gaya Fontaine yang anggun!",
         "Sebuah sapaan? Menarik! Halo, wahai penonton setiaku.",
         "Oh? Halo. Kuharap kau punya sesuatu yang menarik untuk ditampilkan hari ini.",
         "Panggung terasa lebih hidup dengan kehadiranmu. Halo!",
@@ -108,8 +112,8 @@ async def sapa_halo(ctx):
 @bot.command(name="peluk", aliases=["hug"])
 async def sapa_peluk(ctx):
     responses = [
-        f"E-eh?! Pelukan? B-baiklah... hanya kali ini, ya {ctx.author.mention}...",
-        "Kau beruntung Furina sedang baik hati! Ini pelukan spesial dari Archon Hydro~",
+        f"😳 E-eh?! Pelukan? B-baiklah... hanya kali ini, ya {ctx.author.mention}...",
+        "💙 Kau beruntung Furina sedang baik hati! Ini pelukan spesial dari Archon Hydro~",
         f"Sebuah pelukan hangat untuk aktor favoritku hari ini. Manfaatkan selagi bisa, {ctx.author.mention}.",
         "Hmph. Jangan salah paham. Aku tidak memelukmu. Aku hanya... memeriksa kualitas kostummu dari dekat.",
         f"Baiklah, kemari {ctx.author.mention}. Bahkan seorang sutradara agung sepertiku butuh istirahat sejenak.",
