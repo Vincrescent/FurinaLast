@@ -1,12 +1,27 @@
-name: Remote SSH Command
-on: [push]
+name: Deploy Furina Uwu
+
+on:
+  push:
+    branches:
+      - main
+
 jobs:
-  build:
-    name: Build
+  deploy:
+    name: Deploy to Server via SSH Password
     runs-on: ubuntu-latest
+
     steps:
-      - name: Execute remote SSH commands using password
-        uses: appleboy/ssh-action@v1
+      - name: 🔍 Check if SSH_HOST is set
+        run: |
+          if [ -z "${{ secrets.SSH_HOST }}" ]; then
+            echo "❌ SSH_HOST is missing!"
+            exit 1
+          else
+            echo "✅ SSH_HOST is set."
+          fi
+
+      - name: 📡 SSH and Deploy
+        uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
