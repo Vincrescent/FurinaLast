@@ -7,7 +7,7 @@ on:
 
 jobs:
   deploy:
-    name: Deploy to Server via SSH Password
+    name: Deploy to Server via SSH Passwordd
     runs-on: ubuntu-latest
 
     steps:
