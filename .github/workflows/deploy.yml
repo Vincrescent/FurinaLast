@@ -11,14 +11,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🔍 Check if SSH_HOST is set
+      - name: 🔍 Check secrets
         run: |
-          if [ -z "${{ secrets.SSH_HOST }}" ]; then
-            echo "❌ SSH_HOST is missing!"
-            exit 1
-          else
-            echo "✅ SSH_HOST is set."
-          fi
+          [ -z "${{ secrets.SSH_HOST }}" ] && echo "❌ SSH_HOST is missing!" || echo "✅ SSH_HOST OK"
+          [ -z "${{ secrets.SSH_USERNAME }}" ] && echo "❌ SSH_USERNAME is missing!" || echo "✅ SSH_USERNAME OK"
+          [ -z "${{ secrets.SSH_PASSWORD }}" ] && echo "❌ SSH_PASSWORD is missing!" || echo "✅ SSH_PASSWORD OK"
+
 
       - name: 📡 SSH and Deploy
         uses: appleboy/ssh-action@v0.1.10
