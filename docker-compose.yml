@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  furina-bot:
+    build: .
+    container_name: furina-bot
+    restart: always
+    env_file: .env
+    ports:
+      - "9919:8080"
+    volumes:
+      - .:/app
+
+volumes:
+  mongo_data:
