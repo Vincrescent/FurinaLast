@@ -1,20 +1,14 @@
-name: Deploy Furina Uwu
-
-on:
-  push:
-    branches:
-      - main
-
+name: Remote SSH Command
+on: [push]
 jobs:
-  deploy:
-    name: Deploy to Server via SSH Password
+  build:
+    name: Build
     runs-on: ubuntu-latest
-
     steps:
-      - name: 📡 SSH and Deploy
-        uses: appleboy/ssh-action@v1.0.0
+      - name: Execute remote SSH commands using password
+        uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secret.SSH_HOST }}
+          host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           password: ${{ secrets.SSH_PASSWORD }}
           port: 19019
