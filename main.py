@@ -10,12 +10,10 @@ import re
 import pymongo
 from collections import defaultdict
 import asyncio
-from dotenv import load_dotenv # <-- DITAMBAHKAN
+from dotenv import load_dotenv 
 
-# --- [PERBAIKAN] Memuat variabel dari .env ---
-load_dotenv() # <-- DITAMBAHKAN
+load_dotenv() 
 
-# --- KONFIGURASI ---
 TOKEN = os.getenv("DISCORD_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
 CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
@@ -30,7 +28,6 @@ LEVELING_ROLES = {
     75: "Level 75: Tangan Kanan Sutradara"
 }
 
-# --- Inisialisasi Database & Bot ---
 try:
     mongo_client = pymongo.MongoClient(MONGO_URI)
     db = mongo_client.get_database("FurinaDB")
@@ -46,7 +43,6 @@ intents.members = True
 bot = commands.Bot(command_prefix='furina ', intents=intents, help_command=None)
 cooldowns = defaultdict(int)
 
-# === Fungsi Leveling Asynchronous (untuk Performa) ===
 async def process_leveling(message):
     global cooldowns
     try:
@@ -86,7 +82,6 @@ async def process_leveling(message):
     except Exception as e:
         print(f"--- ERROR PADA SISTEM LEVELING (DB): {e} ---")
 
-# === Event on_message (Optimized) ===
 @bot.event
 async def on_message(message):
     if message.author.bot or not message.guild:
@@ -95,7 +90,6 @@ async def on_message(message):
     asyncio.create_task(process_leveling(message))
     await bot.process_commands(message)
 
-# === Perintah Interaksi (Respons Diperbanyak menjadi 7) ===
 @bot.command(name="halo")
 async def sapa_halo(ctx):
     responses = [
@@ -135,7 +129,6 @@ async def sapa_puji(ctx):
     ]
     await ctx.send(random.choice(responses))
 
-# === Perintah Leveling (Database) ===
 @bot.command(name="profil", aliases=["profile"])
 async def profil(ctx, member: discord.Member = None):
     if member is None: member = ctx.author
@@ -169,7 +162,6 @@ async def leaderboard(ctx):
     if not any_user_found: return await ctx.send("🎭 Panggung utama masih kosong!")
     await ctx.send(embed=embed)
 
-# === Perintah Turnamen (File) ===
 @bot.command()
 async def daftar(ctx):
     user_id, username = str(ctx.author.id), str(ctx.author)
@@ -206,7 +198,6 @@ async def hapus(ctx):
         await ctx.send("Maaf, terjadi error pada sistem file.")
         print(f"Error pada perintah 'hapus': {e}")
 
-# === Perintah Utilitas ===
 @bot.command(name="help")
 async def furinahelp(ctx):
     embed = discord.Embed(title="🎭 Daftar Perintah Furina", color=discord.Color.blue(), description="Panggil aku dengan `furina [nama_perintah]`.")
@@ -259,7 +250,6 @@ async def inspeksi(ctx, member: discord.Member = None):
     embed.set_footer(text=f"Diinspeksi oleh Furina atas permintaan {ctx.author.display_name}")
     await ctx.send(embed=embed)
 
-# === Sapa Pagi & Malam (Respons Diperbanyak menjadi 7) ===
 def pesan_sapa_pagi():
     return [
         "*Selamat pagi semuanya!* Semoga hari ini penuh kejutan indah dan energi dramatis ala Fontaine! @here",
@@ -290,7 +280,6 @@ async def sapa_harian():
         if now.hour == 7 and now.minute == 0: await channel.send(random.choice(pesan_sapa_pagi()))
         elif now.hour == 22 and now.minute == 0: await channel.send(random.choice(pesan_sapa_malam()))
 
-# === Event on_ready & Web Server ===
 @bot.event
 async def on_ready():
     print(f"✅ Bot aktif sebagai {bot.user}")
@@ -302,5 +291,4 @@ def home(): return "Furina bot aktif!"
 def run(): app.run(host='0.0.0.0', port=8080)
 Thread(target=run).start()
 
-# === Jalankan Bot ===
 bot.run(TOKEN)
