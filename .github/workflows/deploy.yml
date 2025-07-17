@@ -1,0 +1,24 @@
+name: Deploy Furina Uwu
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to Server via SSH Password
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📡 SSH and Deploy
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 22
+          script: |
+            cd ~/furina-bot
+            git pull origin main
+            docker-compose up --build -d
