@@ -3,6 +3,7 @@ version: '3.8'
 services:
   furina-bot:
     build: .
+    privileged: true
     container_name: furina-bot
     restart: always
     env_file: .env
