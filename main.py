@@ -209,15 +209,31 @@ async def furinahelp(ctx):
     await ctx.send(embed=embed)
 
 @bot.command(name="voting")
-async def voting(ctx, pertanyaan: str, *opsi: str):
-    if len(opsi) < 2: return await ctx.send("😤 Berikan minimal 2 opsi.")
-    if len(opsi) > 9: return await ctx.send("🎭 Maksimal 9 opsi saja.")
+async def voting(ctx, *, argumen: str):
+    bagian = [x.strip() for x in argumen.split("|")]
+    if len(bagian) < 3:
+        return await ctx.send("😤 Format salah. Gunakan: `!voting pertanyaan | opsi1 | opsi2 ...` (minimal 2 opsi)")
+    
+    pertanyaan = bagian[0]
+    opsi = bagian[1:]
+
+    if len(opsi) > 9:
+        return await ctx.send("🎭 Maksimal 9 opsi saja.")
+
     emoji_angka = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"]
     deskripsi_voting = [f"{emoji_angka[i]} {pilihan}" for i, pilihan in enumerate(opsi)]
-    embed = discord.Embed(title=f"📢 VOTING PENTING!", description=f"**{pertanyaan}**\n\n" + "\n".join(deskripsi_voting), color=discord.Color.dark_teal())
+
+    embed = discord.Embed(
+        title="📢 VOTING PENTING!",
+        description=f"**{pertanyaan}**\n\n" + "\n".join(deskripsi_voting),
+        color=discord.Color.dark_teal()
+    )
     embed.set_footer(text=f"Voting dimulai oleh {ctx.author.display_name}")
     pesan_voting = await ctx.send(embed=embed)
-    for i in range(len(opsi)): await pesan_voting.add_reaction(emoji_angka[i])
+
+    for i in range(len(opsi)):
+        await pesan_voting.add_reaction(emoji_angka[i])
+
 
 @bot.command(name="pilih")
 async def pilih(ctx, *pilihan: str):
