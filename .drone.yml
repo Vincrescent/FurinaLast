@@ -20,8 +20,8 @@ steps:
       - cd /home/vincent/furina-bot
       - git reset --hard
       - git pull origin main
-      - docker-compose down
-      - docker-compose up -d --build
+      - docker-compose --privileged down
+      - docker-compose --privileged up -d --build
 
   - name: discord-notify
     dns:
