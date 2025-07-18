@@ -16,8 +16,8 @@ steps:
       - 8.8.8.8
       - 1.1.1.1
     commands:
-      - git config --global --add safe.directory /home/vincent/furina-bot
-      - cd /home/vincent/furina-bot
+      - git config --global --add safe.directory /home/smith/FurinaLast
+      - cd /home/smith/FurinaLast
       - git reset --hard
       - git pull origin main
       - docker-compose down
