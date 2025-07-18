@@ -12,6 +12,9 @@ server:
 
 steps:
   - name: deploy
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     commands:
       - git config --global --add safe.directory /home/vincent/furina-bot
       - cd /home/vincent/furina-bot
@@ -21,6 +24,9 @@ steps:
       - docker-compose up -d --build
 
   - name: discord-notify
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     image: curlimages/curl
     environment:
       DISCORD_WEBHOOK_ID:
