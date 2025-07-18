@@ -1,0 +1,51 @@
+kind: pipeline
+type: ssh
+name: default
+
+server:
+  host:
+    from_secret: SSH_HOST
+  user:
+    from_secret: SSH_USER
+  password:
+    from_secret: SSH_PASSWORD
+
+steps:
+  - name: deploy
+    commands:
+      - git config --global --add safe.directory /home/vincent/furina-bot
+      - cd /home/vincent/furina-bot
+      - git reset --hard
+      - git pull origin main
+      - docker-compose down
+      - docker-compose up -d --build
+
+  - name: discord-notify
+    image: curlimages/curl
+    environment:
+      DISCORD_WEBHOOK_ID:
+        from_secret: DISCORD_WEBHOOK_ID
+      DISCORD_WEBHOOK_TOKEN:
+        from_secret: DISCORD_WEBHOOK_TOKEN
+    commands:
+      - >
+        curl -H "Content-Type: application/json" -X POST
+        -d "$(jq -n --arg branch "$DRONE_BRANCH" --arg author "$DRONE_COMMIT_AUTHOR" --arg message "$DRONE_COMMIT_MESSAGE" --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg repo "$DRONE_REPO" '{
+          "embeds": [
+            {
+              "title": "🚀 Deployment Sukses!",
+              "color": 3066993,
+              "fields": [
+                { "name": "📂 Branch", "value": $branch, "inline": true },
+                { "name": "👤 Author", "value": $author, "inline": true },
+                { "name": "📝 Commit", "value": $message, "inline": false },
+                { "name": "📦 Repository", "value": $repo, "inline": false }
+              ],
+              "footer": {
+                "text": "Powered by Karina CI | Love Karina",
+                "icon_url": "https://i.namu.wiki/i/9geGw66JGFFDo3aPgg3QY9SbGMTFyeYfxAzCsKXGlkigyTEYxTM6BsJzasWhZ2j484X1-tpriILKyMnf6aD0tQ.webp"
+              },
+              "timestamp": $timestamp
+            }
+          ]
+        }')" "https://discord.com/api/webhooks/$DISCORD_WEBHOOK_ID/$DISCORD_WEBHOOK_TOKEN"
