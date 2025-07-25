@@ -95,10 +95,9 @@ async def on_ready():
     print(f"✅ Bot aktif sebagai {bot.user}")
     
     # Tambahkan ini untuk status "Watching"
-    activity = discord.Activity(type=discord.ActivityType.watching, name="In Naga Hitam")
-    await bot.change_presence(status=discord.Status.online, activity=activity)
+    await bot.change_presence(status=discord.Status.dnd, activity=discord.Activity(type=discord.ActivityType.watching, name="In Naga Hitam"))
     
-    sapa_harian.start()
+    #sapa_harian.start()
 
 @bot.command(name="halo")
 async def sapa_halo(ctx):
