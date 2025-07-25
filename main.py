@@ -90,6 +90,16 @@ async def on_message(message):
     asyncio.create_task(process_leveling(message))
     await bot.process_commands(message)
 
+@bot.event
+async def on_ready():
+    print(f"✅ Bot aktif sebagai {bot.user}")
+    
+    # Tambahkan ini untuk status "Watching"
+    activity = discord.Activity(type=discord.ActivityType.watching, name="In Naga Hitam")
+    await bot.change_presence(status=discord.Status.online, activity=activity)
+    
+    sapa_harian.start()
+
 @bot.command(name="halo")
 async def sapa_halo(ctx):
     responses = [
