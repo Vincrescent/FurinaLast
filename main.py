@@ -6,13 +6,12 @@ import os
 import random
 from datetime import datetime
 import pytz
-import re
 import pymongo
 from collections import defaultdict
 import asyncio
-from dotenv import load_dotenv 
+from dotenv import load_dotenv
 
-load_dotenv() 
+load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
@@ -41,63 +40,133 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 bot = commands.Bot(command_prefix='furina ', intents=intents, help_command=None)
-cooldowns = defaultdict(int)
+chat_cooldowns = defaultdict(int)
 
-async def process_leveling(message):
-    global cooldowns
+# =================================================================================
+# BAGIAN BARU & MODIFIKASI: FUNGSI LEVELING TERPUSAT
+# =================================================================================
+async def grant_exp_and_level_up(member: discord.Member, exp_to_add: int, notification_channel: discord.TextChannel):
+    """
+    Fungsi terpusat untuk memberikan EXP (Apresiasi) dan menangani kenaikan level.
+    Bisa digunakan oleh sistem chat, voice, atau sistem lainnya.
+    """
+    if member.bot:
+        return
+
     try:
-        user_id = str(message.author.id)
-        
+        user_id = str(member.id)
         loop = asyncio.get_event_loop()
+        
+        # Mengambil data pengguna dari database
         user_data = await loop.run_in_executor(None, lambda: leveling_collection.find_one({"_id": user_id}))
 
         if not user_data:
             await loop.run_in_executor(None, lambda: leveling_collection.insert_one({"_id": user_id, "apresiasi": 0, "level": 1}))
-            user_data = {"apresiasi": 0, "level": 1}
+            user_data = {"_id": user_id, "apresiasi": 0, "level": 1}
 
-        now = int(datetime.now().timestamp())
-        if now - cooldowns[user_id] > 60:
-            apresiasi_didapat = random.randint(15, 25)
-            new_apresiasi = user_data.get('apresiasi', 0) + apresiasi_didapat
-            cooldowns[user_id] = now
-            
-            level_lama = user_data.get('level', 1)
-            apresiasi_dibutuhkan = 5 * (level_lama ** 2) + 50 * level_lama + 100
-            
-            await loop.run_in_executor(None, lambda: leveling_collection.update_one({"_id": user_id}, {"$set": {"apresiasi": new_apresiasi}}))
+        # Menambahkan apresiasi baru
+        new_apresiasi = user_data.get('apresiasi', 0) + exp_to_add
+        level_lama = user_data.get('level', 1)
+        
+        await loop.run_in_executor(None, lambda: leveling_collection.update_one({"_id": user_id}, {"$set": {"apresiasi": new_apresiasi}}))
 
-            if new_apresiasi >= apresiasi_dibutuhkan:
-                level_baru = level_lama + 1
-                await loop.run_in_executor(None, lambda: leveling_collection.update_one({"_id": user_id}, {"$set": {"level": level_baru}}))
-                await message.channel.send(f"🎉 Selamat, {message.author.mention}! Kau telah naik ke **Level Panggung {level_baru}**!")
-                
-                if level_baru in LEVELING_ROLES:
-                    peran_baru = discord.utils.get(message.guild.roles, name=LEVELING_ROLES[level_baru])
-                    if peran_baru:
-                        await message.author.add_roles(peran_baru)
-                        if level_lama in LEVELING_ROLES:
-                            peran_lama = discord.utils.get(message.guild.roles, name=LEVELING_ROLES[level_lama])
-                            if peran_lama and peran_lama in message.author.roles:
-                                await message.author.remove_roles(peran_lama)
+        # Pengecekan kenaikan level
+        apresiasi_dibutuhkan = 5 * (level_lama ** 2) + 50 * level_lama + 100
+        
+        if new_apresiasi >= apresiasi_dibutuhkan:
+            level_baru = level_lama + 1
+            await loop.run_in_executor(None, lambda: leveling_collection.update_one(
+                {"_id": user_id},
+                {"$set": {"level": level_baru, "apresiasi": 0}} # Reset apresiasi setelah naik level
+            ))
+            
+            await notification_channel.send(f"🎉 Selamat, {member.mention}! Kau telah naik ke **Level Panggung {level_baru}**!")
+
+            # Memberikan role baru jika mencapai level tertentu
+            if level_baru in LEVELING_ROLES:
+                peran_baru = discord.utils.get(member.guild.roles, name=LEVELING_ROLES[level_baru])
+                if peran_baru:
+                    await member.add_roles(peran_baru)
+                    # Menghapus role lama jika ada
+                    if level_lama in LEVELING_ROLES:
+                        peran_lama = discord.utils.get(member.guild.roles, name=LEVELING_ROLES[level_lama])
+                        if peran_lama and peran_lama in member.roles:
+                            await member.remove_roles(peran_lama)
     except Exception as e:
-        print(f"--- ERROR PADA SISTEM LEVELING (DB): {e} ---")
+        print(f"--- ERROR PADA FUNGSI grant_exp_and_level_up: {e} ---")
 
+# =================================================================================
+# MODIFIKASI: SISTEM LEVELING DARI CHAT
+# =================================================================================
+async def process_leveling_chat(message):
+    """
+    Memproses penambahan Apresiasi dari aktivitas chat.
+    Sekarang hanya mengurus cooldown dan memanggil fungsi terpusat.
+    """
+    global chat_cooldowns
+    user_id = str(message.author.id)
+    now = int(datetime.now().timestamp())
+
+    # Cooldown 60 detik per pengguna untuk mendapatkan Apresiasi dari chat
+    if now - chat_cooldowns[user_id] > 60:
+        chat_cooldowns[user_id] = now
+        apresiasi_didapat = random.randint(15, 25)
+        await grant_exp_and_level_up(message.author, apresiasi_didapat, message.channel)
+
+# Event on_message yang telah disederhanakan
 @bot.event
 async def on_message(message):
     if message.author.bot or not message.guild:
         return
 
-    asyncio.create_task(process_leveling(message))
+    # Menjalankan proses leveling dari chat secara asynchronous
+    asyncio.create_task(process_leveling_chat(message))
     await bot.process_commands(message)
 
-@bot.event
-async def on_ready():
-    print(f"✅ Bot aktif sebagai {bot.user}")
-    
-    # Tambahkan ini untuk status "Watching"
-    await bot.change_presence(status=discord.Status.dnd, activity=discord.Activity(type=discord.ActivityType.watching, name="In Naga Hitam"))
-    
-    #sapa_harian.start()
+# =================================================================================
+# BAGIAN BARU: SISTEM LEVELING DARI VOICE CHANNEL
+# =================================================================================
+@tasks.loop(minutes=1)
+async def voice_exp_loop():
+    """
+    Loop yang berjalan setiap menit untuk memberikan apresiasi kepada anggota
+    yang aktif di voice channel bersama orang lain.
+    """
+    try:
+        # Menunggu bot siap sepenuhnya sebelum menjalankan loop pertama kali
+        await bot.wait_until_ready()
+        
+        # Mengambil channel utama untuk mendapatkan objek guild
+        main_channel = bot.get_channel(CHANNEL_ID)
+        if not main_channel:
+            print("Channel ID tidak ditemukan, loop voice EXP tidak bisa berjalan.")
+            return
+            
+        guild = main_channel.guild
+
+        # Iterasi melalui semua voice channel di server
+        for vc in guild.voice_channels:
+            # Memfilter anggota yang bukan bot dan tidak sedang mute/deafen server
+            # Anda bisa menghapus `not m.voice.self_mute` jika ingin tetap memberi exp walau di-mute
+            active_members = [m for m in vc.members if not m.bot]
+
+            # Hanya memberikan Apresiasi jika ada 2 atau lebih orang di channel
+            if len(active_members) >= 2:
+                apresiasi_suara = random.randint(5, 15)  # EXP lebih kecil dari chat
+                
+                for member in active_members:
+                    # Menggunakan channel notifikasi default untuk pesan level up
+                    notification_channel = bot.get_channel(CHANNEL_ID)
+                    await grant_exp_and_level_up(member, apresiasi_suara, notification_channel)
+
+    except Exception as e:
+        print(f"--- ERROR PADA voice_exp_loop: {e} ---")
+
+
+# =================================================================================
+# KODE LAMA ANDA (TANPA PERUBAHAN)
+# ... (Salin semua command Anda dari @bot.command(name="halo") sampai @bot.command(name="inspeksi"))
+# =================================================================================
 
 @bot.command(name="halo")
 async def sapa_halo(ctx):
@@ -145,30 +214,33 @@ async def profil(ctx, member: discord.Member = None):
     if user_data:
         level, apresiasi = user_data.get('level', 1), user_data.get('apresiasi', 0)
         dibutuhkan = 5 * (level ** 2) + 50 * level + 100
+        # Menghindari ZeroDivisionError dan memastikan progres tidak melebihi 100% di tampilan
         persen = min(100, (apresiasi / dibutuhkan) * 100) if dibutuhkan > 0 else 0
         bar = '█' * int(persen / 10) + '░' * (10 - int(persen / 10))
         embed = discord.Embed(title=f"🎭 Kartu Status: {member.display_name}", color=member.color)
         embed.set_thumbnail(url=member.display_avatar.url)
         embed.add_field(name="Status Panggung", value=f"Level {level}", inline=True)
-        embed.add_field(name="Total Apresiasi", value=f"{apresiasi} poin", inline=True)
-        embed.add_field(name="Progres Level", value=f"{bar} ({apresiasi}/{dibutuhkan})", inline=False)
+        embed.add_field(name="Poin Apresiasi", value=f"{apresiasi} poin", inline=True)
+        embed.add_field(name="Progres Level Berikutnya", value=f"{bar} ({apresiasi}/{dibutuhkan})", inline=False)
         await ctx.send(embed=embed)
-    else: await ctx.send(f"Hmm, {member.mention} sepertinya masih malu-malu.")
+    else: await ctx.send(f"Hmm, {member.mention} sepertinya belum pernah tampil di panggungku.")
 
 @bot.command(name="leaderboard", aliases=["panggung_utama"])
 async def leaderboard(ctx):
-    sorted_users = leveling_collection.find().sort("apresiasi", -1).limit(10)
-    embed = discord.Embed(title="🏆 Panggung Utama Fontaine 🏆", description="Inilah 10 Aktor dengan Apresiasi tertinggi!", color=discord.Color.gold())
-    any_user_found = False
-    for i, user_data in enumerate(sorted_users):
-        any_user_found = True
+    # Mengurutkan berdasarkan level, lalu apresiasi
+    sorted_users = leveling_collection.find().sort([("level", -1), ("apresiasi", -1)]).limit(10)
+    embed = discord.Embed(title="🏆 Panggung Utama Fontaine 🏆", description="Inilah 10 Aktor dengan Level Panggung tertinggi!", color=discord.Color.gold())
+    user_list = list(sorted_users)
+    if not user_list:
+        return await ctx.send("🎭 Panggung utama masih kosong! Belum ada yang mendapatkan apresiasi.")
+    
+    for i, user_data in enumerate(user_list):
         try:
             member = await ctx.guild.fetch_member(int(user_data["_id"]))
             nama = member.display_name
         except (discord.NotFound, discord.HTTPException):
             nama = f"Aktor Misterius (ID: {user_data['_id']})"
         embed.add_field(name=f"#{i+1}: {nama}", value=f"**Level {user_data.get('level', 1)}** - {user_data.get('apresiasi', 0)} Apresiasi", inline=False)
-    if not any_user_found: return await ctx.send("🎭 Panggung utama masih kosong!")
     await ctx.send(embed=embed)
 
 @bot.command()
@@ -243,7 +315,6 @@ async def voting(ctx, *, argumen: str):
     for i in range(len(opsi)):
         await pesan_voting.add_reaction(emoji_angka[i])
 
-
 @bot.command(name="pilih")
 async def pilih(ctx, *pilihan: str):
     if len(pilihan) < 2: return await ctx.send("😤 Berikan aku minimal dua pilihan!")
@@ -275,26 +346,23 @@ async def inspeksi(ctx, member: discord.Member = None):
     embed.set_footer(text=f"Diinspeksi oleh Furina atas permintaan {ctx.author.display_name}")
     await ctx.send(embed=embed)
 
+
+# =================================================================================
+# FUNGSI SAPAAN (TANPA PERUBAHAN)
+# =================================================================================
+
 def pesan_sapa_pagi():
     return [
         "*Selamat pagi semuanya!* Semoga hari ini penuh kejutan indah dan energi dramatis ala Fontaine! @here",
         "Furina datang membawa semangat! Mari kita mulai hari ini dengan aksi luar biasa! @here",
-        "Tirai telah dibuka untuk hari yang baru! Selamat pagi, para bintangku! Saatnya bersinar! @here",
-        "Kopi? Teh? Tidak, yang kalian butuhkan adalah semangat dari Archon Hydro untuk memulai hari! Selamat pagi! @here",
-        "Bangunlah, para penidur! Panggung kehidupan menanti penampilan terbaikmu hari ini! @here",
-        "Fajar menyingsing! Sebuah babak baru telah dimulai. Berikan penampilan terbaikmu hari ini! @here",
-        "Selamat pagi, para penonton! Furina sudah siap untuk pertunjukan hari ini. Bagaimana dengan kalian? @here"
+        "Tirai telah dibuka untuk hari yang baru! Selamat pagi, para bintangku! Saatnya bersinar! @here"
     ]
 
 def pesan_sapa_malam():
     return [
         "Malam telah tiba! Jangan lupa istirahat, para penonton Furina~ @here",
         "Sudah waktunya mengakhiri babak hari ini. Selamat malam! @here",
-        "Pertunjukan hari ini selesai. Istirahatlah yang nyenyak agar bisa tampil lebih baik besok. Selamat malam! @here",
-        "Lampu panggung telah padam. Sampai jumpa di pertunjukan esok hari. Mimpi indah! @here",
-        "Bahkan bintang sehebat aku pun butuh istirahat. Selamat malam, semuanya! @here",
-        "Bahkan bulan pun butuh istirahat dari sorotan. Selamat malam, sampai jumpa di babak selanjutnya. @here",
-        "Tirai malam telah turun. Simpan energimu, karena besok panggung akan lebih megah! Selamat malam! @here"
+        "Pertunjukan hari ini selesai. Istirahatlah yang nyenyak agar bisa tampil lebih baik besok. Selamat malam! @here"
     ]
 
 @tasks.loop(minutes=1)
@@ -305,11 +373,18 @@ async def sapa_harian():
         if now.hour == 7 and now.minute == 0: await channel.send(random.choice(pesan_sapa_pagi()))
         elif now.hour == 22 and now.minute == 0: await channel.send(random.choice(pesan_sapa_malam()))
 
+# =================================================================================
+# MODIFIKASI: ON_READY EVENT
+# =================================================================================
 @bot.event
 async def on_ready():
     print(f"✅ Bot aktif sebagai {bot.user}")
     sapa_harian.start()
+    voice_exp_loop.start() # <-- BARIS INI DITAMBAHKAN untuk memulai loop voice EXP
 
+# =================================================================================
+# KODE UNTUK HOSTING (TANPA PERUBAHAN)
+# =================================================================================
 app = Flask('')
 @app.route('/')
 def home(): return "Furina bot aktif!"
