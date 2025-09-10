@@ -353,16 +353,16 @@ async def inspeksi(ctx, member: discord.Member = None):
 
 def pesan_sapa_pagi():
     return [
-        "*Selamat pagi semuanya!* Semoga hari ini penuh kejutan indah dan energi dramatis ala Fontaine! @here",
-        "Furina datang membawa semangat! Mari kita mulai hari ini dengan aksi luar biasa! @here",
-        "Tirai telah dibuka untuk hari yang baru! Selamat pagi, para bintangku! Saatnya bersinar! @here"
+        "*Selamat pagi semuanya!* Semoga hari ini penuh kejutan indah dan energi dramatis ala Fontaine!",
+        "Furina datang membawa semangat! Mari kita mulai hari ini dengan aksi luar biasa!",
+        "Tirai telah dibuka untuk hari yang baru! Selamat pagi, para bintangku! Saatnya bersinar!"
     ]
 
 def pesan_sapa_malam():
     return [
-        "Malam telah tiba! Jangan lupa istirahat, para penonton Furina~ @here",
-        "Sudah waktunya mengakhiri babak hari ini. Selamat malam! @here",
-        "Pertunjukan hari ini selesai. Istirahatlah yang nyenyak agar bisa tampil lebih baik besok. Selamat malam! @here"
+        "Malam telah tiba! Jangan lupa istirahat, para penonton Furina~",
+        "Sudah waktunya mengakhiri babak hari ini. Selamat malam!",
+        "Pertunjukan hari ini selesai. Istirahatlah yang nyenyak agar bisa tampil lebih baik besok. Selamat malam!"
     ]
 
 @tasks.loop(minutes=1)
