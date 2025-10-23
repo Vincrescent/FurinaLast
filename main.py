@@ -10,6 +10,27 @@ import pymongo
 from collections import defaultdict
 import asyncio
 from dotenv import load_dotenv
+from PIL import Image, ImageDraw, ImageFont, ImageOps
+import requests
+import io
+import math
+
+def create_circular_avatar(img_url, size=(128, 128)):
+    """Mengunduh gambar, mengubahnya menjadi bundar, dan mengembalikan objek Image."""
+    response = requests.get(img_url)
+    img_bytes = io.BytesIO(response.content)
+    img = Image.open(img_bytes).convert("RGBA") 
+    
+    img = img.resize(size, Image.LANCZOS)
+    
+    mask = Image.new("L", size, 0)
+    draw = ImageDraw.Draw(mask)
+    draw.ellipse((0, 0, size[0], size[1]), fill=255)
+    
+    output = ImageOps.fit(img, mask.size, centering=(0.5, 0.5))
+    output.putalpha(mask)
+    
+    return output
 
 load_dotenv()
 
@@ -196,38 +217,121 @@ async def sapa_puji(ctx):
 @bot.command(name="profil", aliases=["profile"])
 async def profil(ctx, member: discord.Member = None):
     if member is None: member = ctx.author
-    
     loop = asyncio.get_event_loop()
     user_data = await loop.run_in_executor(None, lambda: leveling_collection.find_one({"_id": str(member.id)}))
     
-    if user_data:
-        level, apresiasi = user_data.get('level', 1), user_data.get('apresiasi', 0)
-        
-        koin = user_data.get('koin_opera', 0)
-        koleksi = user_data.get('koleksi', [])
-
-        dibutuhkan = 5 * (level ** 2) + 50 * level + 100
-        persen = min(100, (apresiasi / dibutuhkan) * 100) if dibutuhkan > 0 else 0
-        bar = '█' * int(persen / 10) + '░' * (10 - int(persen / 10))
-        
-        embed = discord.Embed(title=f"🎭 Kartu Status: {member.display_name}", color=member.color)
-        embed.set_thumbnail(url=member.display_avatar.url)
-        embed.add_field(name="Status Panggung", value=f"Level {level}", inline=True)
-        
-        embed.add_field(name="Koin Opera", value=f"🪙 {koin}", inline=True)
-        
-        embed.add_field(name="Progres Level Berikutnya", value=f"{bar} ({apresiasi}/{dibutuhkan})", inline=False)
-
-        if not koleksi:
-            teks_koleksi = "Belum ada koleksi."
-        else:
-            koleksi_unik = set(koleksi)
-            teks_koleksi = "\n".join([f"• {item} (x{koleksi.count(item)})" for item in koleksi_unik])
-        embed.add_field(name="Inventaris Koleksi", value=teks_koleksi, inline=False)
-
-        await ctx.send(embed=embed)
-    else: 
+    if not user_data:
         await ctx.send(f"Hmm, {member.mention} sepertinya belum pernah tampil di panggungku.")
+        return
+
+    level = user_data.get('level', 1)
+    apresiasi = user_data.get('apresiasi', 0)
+    koin = user_data.get('koin_opera', 0)
+    koleksi = user_data.get('koleksi', []) 
+    dibutuhkan = 5 * (level ** 2) + 50 * level + 100
+    
+    try:
+    
+        img = Image.open("card_template.png").convert("RGBA") 
+        draw = ImageDraw.Draw(img)
+
+        font_regular = ImageFont.truetype("font.ttf", size=24) 
+        font_bold = ImageFont.truetype("font_bold.ttf", size=30) 
+        font_level = ImageFont.truetype("font_bold.ttf", size=48)
+        font_discriminator = ImageFont.truetype("font.ttf", size=20)
+
+        avatar_size = (128, 128)
+        avatar_pos = (50, 80)
+        
+        avatar_circular = create_circular_avatar(member.display_avatar.url, avatar_size)
+        img.paste(avatar_circular, avatar_pos, avatar_circular)
+        
+        text_color = (255, 255, 255, 255)
+        level_text = f"Lvl {level}"
+        draw.text((30, 30), level_text, font=font_level, fill=text_color) 
+
+        img_width, _ = img.size
+        
+        discriminator_text = f"#{member.discriminator}" if member.discriminator != "0" else f"#{member.id}"
+        text_bbox = font_discriminator.getbbox(discriminator_text)
+        text_width = text_bbox[2] - text_bbox[0] 
+        draw.text((img_width - text_width - 30, 30), discriminator_text, font=font_discriminator, fill=text_color)
+        
+        draw.text((avatar_pos[0] + avatar_size[0] + 30, avatar_pos[1] + 20), member.display_name, font=font_bold, fill=text_color)
+        
+        draw.text((avatar_pos[0], avatar_pos[1] + avatar_size[1] + 20), "Apresiasi", font=font_regular, fill=text_color)
+
+        koin_text = f"🪙 {koin} Koin Opera"
+        draw.text((img_width - 250, avatar_pos[1] + avatar_size[1] + 20), koin_text, font=font_regular, fill=text_color)
+
+
+        bar_start_x = avatar_pos[0] + 150 
+        bar_y = avatar_pos[1] + avatar_size[1] + 25
+        bar_width = img_width - bar_start_x - 50 
+        bar_height = 20
+        
+        draw.rectangle((bar_start_x, bar_y, bar_start_x + bar_width, bar_y + bar_height), fill=(70, 70, 70, 200))
+
+        if dibutuhkan > 0:
+            progress_width = int(bar_width * (apresiasi / dibutuhkan))
+            draw.rectangle((bar_start_x, bar_y, bar_start_x + progress_width, bar_y + bar_height), fill=(0, 150, 255, 220)) # Biru
+            
+        progress_text = f"{apresiasi} / {dibutuhkan}"
+        text_bbox = font_regular.getbbox(progress_text)
+        text_width = text_bbox[2] - text_bbox[0]
+        text_x = bar_start_x + (bar_width - text_width) // 2
+        text_y = bar_y + (bar_height - (text_bbox[3] - text_bbox[1])) // 2
+        draw.text((text_x, text_y), progress_text, font=font_regular, fill=(255, 255, 255, 255))
+
+
+        detail_y_start = bar_y + bar_height + 40 
+        
+        draw.text((avatar_pos[0], detail_y_start), "Apresiasi Saat Ini:", font=font_regular, fill=text_color)
+        
+        apresiasi_angka_text = str(apresiasi)
+        text_bbox = font_regular.getbbox(apresiasi_angka_text)
+        text_width = text_bbox[2] - text_bbox[0]
+        draw.text((img_width - text_width - 50, detail_y_start), apresiasi_angka_text, font=font_regular, fill=text_color)
+
+        badge_start_x = img_width - 250 
+        badge_start_y = detail_y_start + 50 
+        badge_spacing_x = 60 
+        badge_spacing_y = 60 
+        badges_per_row = 3
+
+        for i, item_name in enumerate(koleksi):
+            if i >= badges_per_row * 3: 
+                break
+            
+            badge_filename = f"assets/badges/item_{item_name.replace(' ', '_').replace(':', '')}.png"
+            try:
+                badge_img = Image.open(badge_filename).convert("RGBA")
+                badge_img = badge_img.resize((50, 50), Image.LANCZOS)
+                
+                col = i % badges_per_row
+                row = i // badges_per_row
+                
+                x = badge_start_x + col * badge_spacing_x
+                y = badge_start_y + row * badge_spacing_y
+                
+                img.paste(badge_img, (x, y), badge_img)
+            except FileNotFoundError:
+                print(f"Peringatan: File badge untuk '{item_name}' tidak ditemukan di '{badge_filename}'")
+            except Exception as e:
+                print(f"Error saat menempel badge '{item_name}': {e}")
+
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        buffer.seek(0)
+        
+        discord_file = discord.File(buffer, filename="profile.png")
+        await ctx.send(file=discord_file)
+
+    except FileNotFoundError as e:
+        await ctx.send(f"❌ **Error Aset:** Tidak dapat menemukan file: `{e.filename}`. Pastikan `card_template.png`, `font.ttf`, dan `font_bold.ttf` ada di direktori bot, dan file badge ada di `assets/badges/` jika Anda menggunakannya.")
+    except Exception as e:
+        await ctx.send(f"Terjadi error saat membuat gambar profil: {e}")
+        print(f"Error di profil: {e}")
 
 @bot.command(name="leaderboard", aliases=["panggung_utama"])
 async def leaderboard(ctx):
