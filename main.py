@@ -247,23 +247,74 @@ async def leaderboard(ctx):
     await ctx.send(embed=embed)
 
 
-
 PULL_COST = 160 
 LOOT_TABLE = [
-    {"nama": "Mahkota Sutradara Agung", "tipe": "ITEM", "bobot": 0.5, "bintang": 5, "emoji": "👑"},
-    {"nama": "Pedang Ordo Kehakiman", "tipe": "ITEM", "bobot": 0.5, "bintang": 5, "emoji": "⚔️"},
+    {"nama": "Mahkota Sutradara Agung", "tipe": "ITEM", "bobot": 1, "bintang": 5, "emoji": "👑"},
+    {"nama": "Pedang Ordo Kehakiman", "tipe": "ITEM", "bobot": 1, "bintang": 5, "emoji": "⚔️"},
     
-    # --- Bintang 4 (Langka, bobot 10) ---
-    {"nama": "Naskah Opera Epik", "tipe": "ITEM", "bobot": 4, "bintang": 4, "emoji": "📜"},
-    {"nama": "Kamera Kuno Fontaine", "tipe": "ITEM", "bobot": 3, "bintang": 4, "emoji": "📷"},
-    {"nama": "Undangan Pesta Teh Eksklusif", "tipe": "ITEM", "bobot": 3, "bintang": 4, "emoji": "💌"},
+    {"nama": "Naskah Opera Epik", "tipe": "ITEM", "bobot": 5, "bintang": 4, "emoji": "📜"},
+    {"nama": "Kamera Kuno Fontaine", "tipe": "ITEM", "bobot": 5, "bintang": 4, "emoji": "📷"},
+    {"nama": "Undangan Pesta Teh Eksklusif", "tipe": "ITEM", "bobot": 5, "bintang": 4, "emoji": "💌"},
     
-    # --- Bintang 3 (Umum, bobot 89) ---
     {"nama": "50 Koin Opera", "tipe": "KOIN", "bobot": 30, "bintang": 3, "emoji": "🪙"},
     {"nama": "100 Koin Opera", "tipe": "KOIN", "bobot": 20, "bintang": 3, "emoji": "💰"},
-    {"nama": "Kue Macaron", "tipe": "ITEM", "bobot": 19, "bintang": 3, "emoji": "🍮"},
-    {"nama": "Properci Panggung Rusak", "tipe": "ITEM", "bobot": 20, "bintang": 3, "emoji": "🎭"},
+    {"nama": "Kue Macaron", "tipe": "ITEM", "bobot": 18, "bintang": 3, "emoji": "🍮"},
+    {"nama": "Properci Panggung Rusak", "tipe": "ITEM", "bobot": 15, "bintang": 3, "emoji": "🎭"},
 ]
+
+@bot.command(name="gachainfo", aliases=["droprate", "listgacha"])
+async def gacha_info(ctx):
+    """Menampilkan semua item gacha dan probabilitas (rate) mereka."""
+    
+    embed = discord.Embed(
+        title="🎭 Daftar Hadiah Opera Fantastis 🎭", 
+        description=f"Setiap pertunjukan (pull) membutuhkan **{PULL_COST} Koin Opera**.",
+        color=discord.Color.dark_teal()
+    )
+
+    total_weight = sum(item["bobot"] for item in LOOT_TABLE)
+    items_by_star = {5: [], 4: [], 3: []}
+
+    for item in LOOT_TABLE:
+        nama = item["nama"]
+        emoji = item["emoji"]
+        bintang = item["bintang"]
+        
+        percentage = (item["bobot"] / total_weight) * 100
+        
+        if percentage.is_integer():
+            rate_str = f"{int(percentage)}%"
+        else:
+            rate_str = f"{percentage:.1f}%" 
+
+        line = f"{emoji} **{nama}** - (`{rate_str}`)"
+        
+        if bintang in items_by_star:
+            items_by_star[bintang].append(line)
+
+    if items_by_star[5]:
+        embed.add_field(
+            name="👑 Bintang 5 (Sangat Langka)", 
+            value="\n".join(items_by_star[5]), 
+            inline=False
+        )
+        
+    if items_by_star[4]:
+        embed.add_field(
+            name="✨ Bintang 4 (Langka)", 
+            value="\n".join(items_by_star[4]), 
+            inline=False
+        )
+        
+    if items_by_star[3]:
+        embed.add_field(
+            name="⭐ Bintang 3 (Umum)", 
+            value="\n".join(items_by_star[3]), 
+            inline=False
+        )
+        
+    embed.set_footer(text="Semoga berhasil mendapatkan item favoritmu!")
+    await ctx.send(embed=embed)
 
 @bot.command(name="pull", aliases=["gacha"])
 async def pull_gacha(ctx):
@@ -427,11 +478,32 @@ async def hapus(ctx):
 
 @bot.command(name="help")
 async def furinahelp(ctx):
-    embed = discord.Embed(title="🎭 Daftar Perintah Furina", color=discord.Color.blue(), description="Panggil aku dengan `furina [nama_perintah]`.")
+    embed = discord.Embed(
+        title="🎭 Daftar Perintah Furina", 
+        color=discord.Color.blue(), 
+        description="Panggil aku dengan `furina [nama_perintah]`."
+    )
     embed.add_field(name="Interaksi", value="`halo`, `peluk`, `puji`", inline=False)
-    embed.add_field(name="Leveling", value="`profil`, `leaderboard`", inline=False)
+    
+    embed.add_field(
+        name="Leveling & Gacha 🪙", 
+        value="`profil` - Lihat level, koin, dan koleksimu\n"
+              "`leaderboard` - Lihat papan peringkat level\n"
+              "`pull` / `gacha` - Lakukan gacha (biaya 160 koin)\n"
+              "`gachainfo` / `droprate` - Lihat daftar hadiah gacha", 
+        inline=False
+    )
     embed.add_field(name="Turnamen", value="`daftar`, `peserta`, `hapus`", inline=False)
     embed.add_field(name="Utilitas", value="`voting`, `pilih`, `panggung`, `inspeksi`", inline=False)
+    try:
+        if ctx.author.id == OWNER_ID:
+            embed.add_field(
+                name="👑 Khusus Sutradara (Admin)", 
+                value="`givepoint` / `addkoin` - Memberi koin ke member", 
+                inline=False
+            )
+    except NameError:        pass 
+
     embed.set_footer(text="Gunakan dengan bijak ya~ 💙")
     await ctx.send(embed=embed)
 
