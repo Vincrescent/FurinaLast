@@ -297,7 +297,7 @@ async def pull_gacha(ctx):
     bintang_hadiah = "⭐" * hasil_tarikan["bintang"]
 
     embed_title = f"Hasil Pertunjukan Gacha!"
-    embed_color = discord.Color.grey()
+    embed_color = discord.Color.gray()
     
     if tipe_hadiah == "ITEM":
         await loop.run_in_executor(None, lambda: leveling_collection.update_one(
