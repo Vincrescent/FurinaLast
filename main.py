@@ -17,6 +17,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
 CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
 FILE_PESERTA = "peserta_turnamen.txt"
+OWNER_ID=379604922716389408
 
 LEVELING_ROLES = {
     5: "Level 5: Aktor Pendatang Baru",
@@ -331,6 +332,62 @@ async def pull_gacha(ctx):
     embed.set_footer(text=f"Biaya: {PULL_COST} Koin | Sisa Koin: {koin_sisa}")
     
     await ctx.send(embed=embed)
+
+@bot.command(name="givepoint", aliases=["addkoin", "berikoin"])
+async def give_point(ctx, member: discord.Member, amount: int):
+    """
+    Memberikan 'Koin Opera' kepada member.
+    Hanya bisa digunakan oleh OWNER_ID.
+    """
+    
+    if ctx.author.id != OWNER_ID:
+        return await ctx.send("Hmph! Hanya Sutradara Utama (Owner) yang boleh menggunakan perintah ini!")
+        
+    if amount <= 0:
+        return await ctx.send("Jumlah koin harus lebih dari 0!")
+        
+    user_id = str(member.id)
+    loop = asyncio.get_event_loop()
+    
+    try:
+        user_data = await loop.run_in_executor(None, lambda: leveling_collection.find_one({"_id": user_id}))
+        
+        if not user_data:
+            print(f"Membuat profil baru untuk {member.display_name} via givepoint...")
+            new_user_data = {
+                "_id": user_id, 
+                "apresiasi": 0, 
+                "level": 1,
+                "koin_opera": amount, 
+                "koleksi": []
+            }
+            await loop.run_in_executor(None, lambda: leveling_collection.insert_one(new_user_data))
+        else:
+            await loop.run_in_executor(None, lambda: leveling_collection.update_one(
+                {"_id": user_id},
+                {"$inc": {"koin_opera": amount}}
+            ))
+            
+        await ctx.send(f"✅ **Perintah Sutradara!** Telah ditambahkan **{amount} Koin Opera** ke {member.mention}.")
+
+    except Exception as e:
+        await ctx.send(f"Terjadi kesalahan saat mengakses database: {e}")
+        print(f"Error pada give_point: {e}")
+
+@give_point.error
+async def give_point_error(ctx, error):
+    """Error handler untuk perintah give_point"""
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("Format salah! Gunakan: `furina givepoint [@member] [jumlah]`")
+    elif isinstance(error, commands.MemberNotFound):
+        await ctx.send("Aku tidak bisa menemukan anggota tersebut.")
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send("Jumlah harus berupa angka!")
+    elif isinstance(error, commands.CheckFailure):
+        pass
+    else:
+        await ctx.send(f"Terjadi error yang tidak diketahui: {error}")
+        print(f"Error pada give_point: {error}")
 
 @bot.command()
 async def daftar(ctx):
